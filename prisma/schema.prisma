@@ -1,0 +1,281 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum AuthProvider {
+  EMAIL
+  GOOGLE
+  PHONE
+}
+
+enum UserRole {
+  ADMIN_GLOBAL
+  BARBEIRO
+  CLIENTE
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+// Models
+model User {
+  id           String       @id @default(cuid())
+  email        String?      @unique
+  phone        String?      @unique
+  name         String
+  password     String?
+  authProvider AuthProvider @default(EMAIL)
+  role         UserRole     @default(CLIENTE)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  // Relations
+  barbershops     Barbershop[]
+  barberProfiles  BarberProfile[]
+  customerProfile CustomerProfile?
+  barberRequests  BarberRequest[]
+
+  @@index([email])
+  @@index([phone])
+}
+
+model Barbershop {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  address     String
+  city        String
+  state       String
+  zipCode     String?
+  latitude    Float?
+  longitude   Float?
+  logoUrl     String?
+  coverUrl    String?
+  ownerId     String
+  acceptsPublicRequests Boolean @default(false) // Se aceita solicitações públicas de barbeiros
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  owner        User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  barbers      BarberProfile[]
+  services     Service[]
+  workingHours WorkingHours[]
+  appointments Appointment[]
+  subscription Subscription?
+  barberRequests BarberRequest[]
+
+  @@index([ownerId])
+  @@index([city])
+  @@index([latitude, longitude])
+}
+
+model BarberProfile {
+  id           String   @id @default(cuid())
+  userId       String
+  barbershopId String
+  bio          String?
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  barbershop         Barbershop           @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  appointments       Appointment[]
+  workingHours       BarberWorkingHours[]
+  services           BarberService[]
+  barbershopServices ServiceBarber[]
+
+  @@unique([userId, barbershopId]) // Um barbeiro só pode ter um perfil por barbearia
+  @@index([barbershopId])
+  @@index([userId])
+}
+
+model CustomerProfile {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  dateOfBirth      DateTime?
+  avatarUrl        String?
+  mainBarbershopId String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Relations
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+}
+
+model Service {
+  id           String   @id @default(cuid())
+  barbershopId String
+  name         String
+  description  String?
+  price        Float
+  duration     Int // duração em minutos
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  barbershop   Barbershop      @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+  barbers      ServiceBarber[]
+
+  @@index([barbershopId])
+  @@index([isActive])
+}
+
+model WorkingHours {
+  id           String   @id @default(cuid())
+  barbershopId String
+  dayOfWeek    Int // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
+  startTime    String // formato HH:mm
+  endTime      String // formato HH:mm
+  isOpen       Boolean  @default(true)
+  gapMinutes   Int      @default(0) // intervalo entre atendimentos
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@index([barbershopId])
+  @@index([dayOfWeek])
+}
+
+model Appointment {
+  id              String   @id @default(cuid())
+  barbershopId    String
+  barberId        String
+  customerId      String
+  serviceId       String? // ID do serviço da barbearia (opcional)
+  barberServiceId String? // ID do serviço específico do barbeiro (opcional)
+  startTime       DateTime
+  endTime         DateTime
+  status          String   @default("PENDING") // PENDING, CONFIRMED, COMPLETED, CANCELLED, NO_SHOW
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  barbershop    Barbershop      @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  barber        BarberProfile   @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  customer      CustomerProfile @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  service       Service?        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  barberService BarberService?  @relation(fields: [barberServiceId], references: [id], onDelete: Cascade)
+
+  @@index([barbershopId])
+  @@index([barberId])
+  @@index([customerId])
+  @@index([startTime])
+  @@index([status])
+}
+
+model Subscription {
+  id                 String             @id @default(cuid())
+  barbershopId       String             @unique
+  status             SubscriptionStatus @default(TRIAL)
+  trialEndsAt        DateTime?
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  cancelAt           DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  // Relations
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+model BarberWorkingHours {
+  id        String   @id @default(cuid())
+  barberId  String
+  dayOfWeek Int // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
+  startTime String // formato HH:mm
+  endTime   String // formato HH:mm
+  isOpen    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  barber BarberProfile @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  @@unique([barberId, dayOfWeek]) // Um barbeiro só pode ter um horário por dia
+  @@index([barberId])
+  @@index([dayOfWeek])
+}
+
+model BarberService {
+  id          String   @id @default(cuid())
+  barberId    String
+  name        String
+  description String?
+  price       Float
+  duration    Int // duração em minutos
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  barber       BarberProfile @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@index([barberId])
+  @@index([isActive])
+}
+
+model ServiceBarber {
+  id        String   @id @default(cuid())
+  serviceId String
+  barberId  String
+  createdAt DateTime @default(now())
+
+  // Relations
+  service Service       @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  barber  BarberProfile @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, barberId])
+  @@index([serviceId])
+  @@index([barberId])
+}
+
+enum BarberRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model BarberRequest {
+  id           String              @id @default(cuid())
+  barberId     String // ID do usuário barbeiro
+  barbershopId String
+  status       BarberRequestStatus @default(PENDING)
+  message      String? // Mensagem opcional do barbeiro
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  reviewedAt   DateTime? // Quando foi aprovado/rejeitado
+
+  // Relations
+  barber     User      @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@unique([barberId, barbershopId]) // Um barbeiro só pode ter uma solicitação por barbearia
+  @@index([barberId])
+  @@index([barbershopId])
+  @@index([status])
+}
