@@ -8,7 +8,7 @@ Plataforma SaaS onde barbearias se cadastram, configuram seus atendimentos e cli
 - **Estilização**: Tailwind CSS
 - **Backend**: Next.js Route Handlers e Server Actions
 - **Banco de Dados**: PostgreSQL (Neon)
-- **ORM**: Prisma 7
+- **ORM**: Prisma 5.22.0
 - **Autenticação**: NextAuth.js v5 (Auth.js)
 - **Gerenciamento de Estado**: TanStack Query (React Query) + Zustand
 - **Validação**: Zod
